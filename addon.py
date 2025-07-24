@@ -457,6 +457,9 @@ class BlenderMCPServer:
         """Import generated Hyper3D asset (placeholder)"""
         return {"imported": False, "message": "Hyper3D integration not implemented"}
 
+# Global server instance storage
+_server_instances = {}
+
 # UI Panel
 class BLENDERMCP_PT_main_panel(bpy.types.Panel):
     bl_label = "BlenderMCP"
@@ -469,7 +472,8 @@ class BLENDERMCP_PT_main_panel(bpy.types.Panel):
         layout = self.layout
         
         # Server status
-        if hasattr(context.scene, 'blendermcp_server_instance') and context.scene.blendermcp_server_instance and context.scene.blendermcp_server_instance.running:
+        scene_id = str(context.scene.name)
+        if scene_id in _server_instances and _server_instances[scene_id].running:
             layout.label(text="Status: Connected", icon='CONNECTED')
             layout.operator("blendermcp.disconnect", text="Disconnect from Claude")
         else:
@@ -492,10 +496,11 @@ class BLENDERMCP_OT_connect(bpy.types.Operator):
     bl_label = "Connect to Claude"
     
     def execute(self, context):
-        if not hasattr(context.scene, 'blendermcp_server_instance') or not context.scene.blendermcp_server_instance or not context.scene.blendermcp_server_instance.running:
-            if not context.scene.blendermcp_server_instance:
-                context.scene.blendermcp_server_instance = BlenderMCPServer()
-            context.scene.blendermcp_server_instance.start()
+        scene_id = str(context.scene.name)
+        if scene_id not in _server_instances or not _server_instances[scene_id].running:
+            if scene_id not in _server_instances:
+                _server_instances[scene_id] = BlenderMCPServer()
+            _server_instances[scene_id].start()
             self.report({'INFO'}, "Connected to Claude")
         else:
             self.report({'WARNING'}, "Already connected")
@@ -506,8 +511,9 @@ class BLENDERMCP_OT_disconnect(bpy.types.Operator):
     bl_label = "Disconnect from Claude"
     
     def execute(self, context):
-        if hasattr(context.scene, 'blendermcp_server_instance') and context.scene.blendermcp_server_instance and context.scene.blendermcp_server_instance.running:
-            context.scene.blendermcp_server_instance.stop()
+        scene_id = str(context.scene.name)
+        if scene_id in _server_instances and _server_instances[scene_id].running:
+            _server_instances[scene_id].stop()
             self.report({'INFO'}, "Disconnected from Claude")
         else:
             self.report({'WARNING'}, "Not connected")
@@ -525,14 +531,10 @@ def register_properties():
         description="Enable Hyper3D Rodin AI model generation",
         default=False
     )
-    # Store server instance as a simple attribute
-    bpy.types.Scene.blendermcp_server_instance = None
 
 def unregister_properties():
     del bpy.types.Scene.blendermcp_use_polyhaven
     del bpy.types.Scene.blendermcp_use_hyper3d
-    if hasattr(bpy.types.Scene, 'blendermcp_server_instance'):
-        del bpy.types.Scene.blendermcp_server_instance
 
 # Registration
 classes = [
@@ -547,9 +549,11 @@ def register():
         bpy.utils.register_class(cls)
 
 def unregister():
-    # Stop server if running
-    if hasattr(bpy.context.scene, 'blendermcp_server_instance') and bpy.context.scene.blendermcp_server_instance and bpy.context.scene.blendermcp_server_instance.running:
-        bpy.context.scene.blendermcp_server_instance.stop()
+    # Stop all server instances
+    for scene_id, server in _server_instances.items():
+        if server.running:
+            server.stop()
+    _server_instances.clear()
     
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
