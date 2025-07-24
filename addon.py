@@ -22,11 +22,13 @@ bl_info = {
     "category": "Interface",
 }
 
-class BlenderMCPServer:
-    def __init__(self, host='localhost', port=9876):
-        self.host = host
-        self.port = port
-        self.running = False
+class BlenderMCPServer(bpy.types.PropertyGroup):
+    host: StringProperty(default='localhost')
+    port: IntProperty(default=9876)
+    running: BoolProperty(default=False)
+    
+    def __init__(self):
+        super().__init__()
         self.socket = None
         self.server_thread = None
     
@@ -469,7 +471,7 @@ class BLENDERMCP_PT_main_panel(bpy.types.Panel):
         layout = self.layout
         
         # Server status
-        if hasattr(context.scene, 'blendermcp_server') and context.scene.blendermcp_server:
+        if hasattr(context.scene, 'blendermcp_server_instance') and context.scene.blendermcp_server_instance and context.scene.blendermcp_server_instance.running:
             layout.label(text="Status: Connected", icon='CONNECTED')
             layout.operator("blendermcp.disconnect", text="Disconnect from Claude")
         else:
@@ -492,9 +494,10 @@ class BLENDERMCP_OT_connect(bpy.types.Operator):
     bl_label = "Connect to Claude"
     
     def execute(self, context):
-        if not hasattr(context.scene, 'blendermcp_server') or not context.scene.blendermcp_server:
-            context.scene.blendermcp_server = BlenderMCPServer()
-            context.scene.blendermcp_server.start()
+        if not hasattr(context.scene, 'blendermcp_server_instance') or not context.scene.blendermcp_server_instance or not context.scene.blendermcp_server_instance.running:
+            if not context.scene.blendermcp_server_instance:
+                context.scene.blendermcp_server_instance = BlenderMCPServer()
+            context.scene.blendermcp_server_instance.start()
             self.report({'INFO'}, "Connected to Claude")
         else:
             self.report({'WARNING'}, "Already connected")
@@ -505,9 +508,8 @@ class BLENDERMCP_OT_disconnect(bpy.types.Operator):
     bl_label = "Disconnect from Claude"
     
     def execute(self, context):
-        if hasattr(context.scene, 'blendermcp_server') and context.scene.blendermcp_server:
-            context.scene.blendermcp_server.stop()
-            context.scene.blendermcp_server = None
+        if hasattr(context.scene, 'blendermcp_server_instance') and context.scene.blendermcp_server_instance and context.scene.blendermcp_server_instance.running:
+            context.scene.blendermcp_server_instance.stop()
             self.report({'INFO'}, "Disconnected from Claude")
         else:
             self.report({'WARNING'}, "Not connected")
@@ -515,7 +517,6 @@ class BLENDERMCP_OT_disconnect(bpy.types.Operator):
 
 # Properties
 def register_properties():
-    bpy.types.Scene.blendermcp_server = bpy.props.PointerProperty(type=BlenderMCPServer)
     bpy.types.Scene.blendermcp_use_polyhaven = bpy.props.BoolProperty(
         name="Use Poly Haven",
         description="Enable Poly Haven asset integration",
@@ -526,14 +527,18 @@ def register_properties():
         description="Enable Hyper3D Rodin AI model generation",
         default=False
     )
+    # Store server instance as a simple attribute
+    bpy.types.Scene.blendermcp_server_instance = None
 
 def unregister_properties():
-    del bpy.types.Scene.blendermcp_server
     del bpy.types.Scene.blendermcp_use_polyhaven
     del bpy.types.Scene.blendermcp_use_hyper3d
+    if hasattr(bpy.types.Scene, 'blendermcp_server_instance'):
+        del bpy.types.Scene.blendermcp_server_instance
 
 # Registration
 classes = [
+    BlenderMCPServer,
     BLENDERMCP_PT_main_panel,
     BLENDERMCP_OT_connect,
     BLENDERMCP_OT_disconnect,
@@ -546,8 +551,8 @@ def register():
 
 def unregister():
     # Stop server if running
-    if hasattr(bpy.context.scene, 'blendermcp_server') and bpy.context.scene.blendermcp_server:
-        bpy.context.scene.blendermcp_server.stop()
+    if hasattr(bpy.context.scene, 'blendermcp_server_instance') and bpy.context.scene.blendermcp_server_instance and bpy.context.scene.blendermcp_server_instance.running:
+        bpy.context.scene.blendermcp_server_instance.stop()
     
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
