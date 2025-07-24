@@ -22,13 +22,11 @@ bl_info = {
     "category": "Interface",
 }
 
-class BlenderMCPServer(bpy.types.PropertyGroup):
-    host: StringProperty(default='localhost')
-    port: IntProperty(default=9876)
-    running: BoolProperty(default=False)
-    
-    def __init__(self):
-        super().__init__()
+class BlenderMCPServer:
+    def __init__(self, host='localhost', port=9876):
+        self.host = host
+        self.port = port
+        self.running = False
         self.socket = None
         self.server_thread = None
     
@@ -538,7 +536,6 @@ def unregister_properties():
 
 # Registration
 classes = [
-    BlenderMCPServer,
     BLENDERMCP_PT_main_panel,
     BLENDERMCP_OT_connect,
     BLENDERMCP_OT_disconnect,
